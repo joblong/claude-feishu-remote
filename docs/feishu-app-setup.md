@@ -38,24 +38,20 @@
 
 「版本管理与发布」→ 创建版本 → 提交审核 → 发布。开发者版本对自己租户立即生效。
 
-## 6. 拿目标 `open_id`
+## 6. 绑定审批者 `open_id`(自动)
 
-审批卡片推给你自己,所以需要**你的** open_id。
+审批卡片要推给你自己,所以 daemon 需要知道你的 `open_id`。**不用手动查**——启动后在飞书 1:1 对话里发一句话就行,daemon 会自动绑定并把 open_id 回写到 `.env`。
 
-**方法 A**(推荐 — daemon 自动打印):
+1. **填好 APP_ID / APP_SECRET,open_id 留空**
 
-daemon 订阅了 `im.message.receive_v1`,机器人收到任何消息时都会在日志里打印发送者的 open_id。思路是:先让 daemon 跑起来,然后给机器人发一句话,读日志拿值。
-
-1. **填占位凭证让 daemon 能启动**
-
-   编辑 `~/.claude/feishu-daemon/.env`,把 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 填成真实值。`FEISHU_TARGET_OPEN_ID` 这一行**必须非空**(代码里是 `required=True`),先随便填个占位值:
+   `~/.claude/feishu-daemon/.env`:
    ```
    FEISHU_APP_ID=cli_xxxxxxxxxxxx
    FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   FEISHU_TARGET_OPEN_ID=ou_placeholder
+   FEISHU_TARGET_OPEN_ID=
    ```
 
-2. **启动(或重启) daemon**
+2. **启动 daemon**
 
    macOS:
    ```bash
@@ -69,34 +65,29 @@ daemon 订阅了 `im.message.receive_v1`,机器人收到任何消息时都会在
    systemctl --user restart feishu-claude.service
    ```
 
-   确认启动成功:
-   ```bash
-   afk status       # 应显示 daemon : running
-   tail ~/.claude/feishu-remote/daemon.log    # 应看到 "daemon starting" 和 WebSocket 连接日志
-   ```
+   日志里会看到:`FEISHU_TARGET_OPEN_ID 未绑定,等待首条 1:1 消息自动绑定…`。
 
-3. **给机器人发消息**
+3. **在飞书 1:1 对话里给机器人发一句话**
 
-   在飞书里搜你创建的机器人名字 → 加为好友 → 1:1 对话里发任意一句(比如 `hello`)。
+   搜机器人名字 → 加为好友 → **私聊**里发任意内容(比如 `hi`)。
 
-4. **读日志拿 open_id**
+   手机上会立刻收到 daemon 的回复 `已绑定审批者`,`.env` 里的 `FEISHU_TARGET_OPEN_ID=` 也会被自动填好。完成。
 
-   ```bash
-   tail -f ~/.claude/feishu-remote/daemon.log
-   ```
+### 为什么只接受 1:1 消息
 
-   你会看到类似这样一行(来自 daemon 的 `on_message` handler):
-   ```
-   2026-04-29 ... INFO feishu-daemon: im.message.receive_v1 open_id=ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx chat_id=oc_xxx content=...
-   ```
+如果机器人还在其他群里,群消息会被 daemon **主动忽略**。这样即使有人先在群里 @机器人,也不会抢到你的绑定位。TOFU(Trust On First Use)是"第一条 1:1 消息",不是"第一条任何消息"。
 
-   复制 `ou_` 开头那一串(32 位 hex)。
+### 换人 / 换主机怎么办
 
-5. **回填真实 open_id 并重启**
+```bash
+afk unbind                                           # 清空 .env 里的 FEISHU_TARGET_OPEN_ID
+launchctl kickstart -k gui/$(id -u)/com.user.feishu-claude   # 重启 daemon
+# 新的人发一条 1:1 消息即可接管
+```
 
-   把 `.env` 里 `FEISHU_TARGET_OPEN_ID=ou_placeholder` 改成刚拿到的真实 `ou_...`,重启 daemon(同步骤 2)。
+### 手动查(可选,不推荐)
 
-**方法 B**:开放平台后台「通讯录 → 成员 → 你自己」也能看到 open_id(有的租户隐藏)。
+如果自动绑定不能用,也可以去飞书开放平台后台「通讯录 → 成员 → 你自己」翻 open_id(有的租户隐藏),手动填入 `.env` 里 `FEISHU_TARGET_OPEN_ID=ou_...` 再重启 daemon。
 
 ## 7. 端到端自测
 

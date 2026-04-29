@@ -78,6 +78,14 @@ class FeishuState:
         with self.lock:
             self.active.pop(req_id, None)
 
+    def try_bind_target(self, open_id: str) -> bool:
+        """线程安全地把 target_open_id 从占位值替换成 open_id。已绑定返回 False。"""
+        with self.lock:
+            if not config.is_placeholder_open_id(self.target_open_id):
+                return False
+            self.target_open_id = open_id
+            return True
+
 
 def _send_card(state: FeishuState, req_id: str, pending: dict) -> str | None:
     """Send the approval card. Return message_id on success, None on failure."""
@@ -269,14 +277,55 @@ def _make_on_card_action(state: "FeishuState"):
     return on_card_action
 
 
-def _make_on_message():
+def _send_text(state: FeishuState, open_id: str, text: str) -> None:
+    """向指定用户发一条纯文本消息。用于绑定成功反馈等场景。"""
+    try:
+        from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
+    except ImportError:
+        log.exception("lark-oapi not available")
+        return
+    req = (
+        CreateMessageRequest.builder()
+        .receive_id_type("open_id")
+        .request_body(
+            CreateMessageRequestBody.builder()
+            .receive_id(open_id)
+            .msg_type("text")
+            .content(json.dumps({"text": text}, ensure_ascii=False))
+            .build()
+        )
+        .build()
+    )
+    try:
+        resp = state.client.im.v1.message.create(req)
+    except Exception:
+        log.exception("exception sending text to open_id=%s", open_id)
+        return
+    if not resp.success():
+        log.error("send text failed open_id=%s code=%s msg=%s", open_id, resp.code, resp.msg)
+
+
+def _make_on_message(state: "FeishuState"):
     def on_message(data) -> None:
         try:
             sender_open_id = data.event.sender.sender_id.open_id
             chat_id = data.event.message.chat_id
+            chat_type = data.event.message.chat_type or ""
             content = data.event.message.content
-            log.info("im.message.receive_v1 open_id=%s chat_id=%s content=%s",
-                     sender_open_id, chat_id, content)
+            log.info("im.message.receive_v1 open_id=%s chat_type=%s chat_id=%s content=%s",
+                     sender_open_id, chat_type, chat_id, content)
+
+            # 自动绑定审批者:只接受 1:1 (p2p) 消息,群聊忽略(TOFU 防误绑)
+            if chat_type != "p2p":
+                return
+            if not state.try_bind_target(sender_open_id):
+                return  # 已绑定过,忽略
+            try:
+                config.persist_target_open_id(sender_open_id)
+                log.info("自动绑定审批者 open_id=%s 已持久化到 .env", sender_open_id)
+            except Exception:
+                log.exception("persist_target_open_id 失败,绑定仅存在于内存")
+            _send_text(state, sender_open_id, "已绑定审批者")
         except Exception:
             log.exception("failed to parse im.message.receive_v1 payload")
     return on_message
@@ -289,7 +338,7 @@ def main() -> int:
 
     app_id = config.get_env("FEISHU_APP_ID", required=True)
     app_secret = config.get_env("FEISHU_APP_SECRET", required=True)
-    target_open_id = config.get_env("FEISHU_TARGET_OPEN_ID", required=True)
+    target_open_id = config.get_env("FEISHU_TARGET_OPEN_ID", default="") or ""
 
     try:
         import lark_oapi as lark
@@ -308,9 +357,15 @@ def main() -> int:
 
     state = FeishuState(rest_client, target_open_id)
 
+    if config.is_placeholder_open_id(target_open_id):
+        log.warning(
+            "FEISHU_TARGET_OPEN_ID 未绑定,等待首条 1:1 消息自动绑定。"
+            "请把机器人拉到 1:1 对话里发任意一句话(不要在群里发,群消息会被忽略)。"
+        )
+
     event_handler = (
         lark.EventDispatcherHandler.builder("", "")
-        .register_p2_im_message_receive_v1(_make_on_message())
+        .register_p2_im_message_receive_v1(_make_on_message(state))
         .register_p2_card_action_trigger(_make_on_card_action(state))
         .build()
     )

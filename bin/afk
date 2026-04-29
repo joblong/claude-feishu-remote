@@ -35,11 +35,12 @@ daemon_status() {
 
 usage() {
     cat <<EOF
-Usage: afk <on|off|status|-h>
+Usage: afk <on|off|status|unbind|-h>
 
   on      enable away mode (feishu-remote approval takes over)
   off     disable away mode (Claude Code native permission UI)
   status  show sentinel and daemon state
+  unbind  清空 .env 里的 FEISHU_TARGET_OPEN_ID,daemon 重启后重新绑定下一位 1:1 发送者
 EOF
 }
 
@@ -66,6 +67,25 @@ case "${1:-}" in
             echo "sentinel : OFF"
         fi
         printf 'daemon   : %s\n' "$(daemon_status)"
+        ;;
+    unbind)
+        ENV_FILE="${HOME}/.claude/feishu-daemon/.env"
+        if [[ ! -f "$ENV_FILE" ]]; then
+            echo "afk: $ENV_FILE 不存在,无需解绑"
+            exit 0
+        fi
+        tmp=$(mktemp)
+        if grep -q '^FEISHU_TARGET_OPEN_ID=' "$ENV_FILE"; then
+            awk '/^FEISHU_TARGET_OPEN_ID=/{print "FEISHU_TARGET_OPEN_ID="; next} {print}' "$ENV_FILE" > "$tmp"
+        else
+            cat "$ENV_FILE" > "$tmp"
+            echo "FEISHU_TARGET_OPEN_ID=" >> "$tmp"
+        fi
+        mv "$tmp" "$ENV_FILE"
+        chmod 600 "$ENV_FILE"
+        echo "afk: unbind 完成。重启 daemon 后下一条 1:1 消息会触发新绑定。"
+        echo "  macOS: launchctl kickstart -k gui/\$(id -u)/com.user.feishu-claude"
+        echo "  Linux: systemctl --user restart feishu-claude.service"
         ;;
     -h|--help|help|"")
         usage
