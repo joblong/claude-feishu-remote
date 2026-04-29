@@ -1,6 +1,6 @@
 # claude-feishu-remote — 方案与实现记录
 
-> Phase 3 终版。由 openClawMac (macOS) 端到端验证通过,待推 tprod (Ubuntu)。
+> Phase 3 终版。已在本地 macOS 端到端验证通过,Linux(Ubuntu)部署步骤待实测。
 
 ## 1. 目标
 
@@ -144,7 +144,7 @@ on_card_action:
 ### 4.1 macOS (launchd user agent)
 
 ```bash
-cd ~/aiDev/others/claude-feishu-remote
+git clone https://github.com/joblong/claude-feishu-remote.git && cd claude-feishu-remote
 bash install.sh                                   # 幂等
 cp .env.template ~/.claude/feishu-daemon/.env     # 填 App ID/Secret/open_id
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.user.feishu-claude.plist
@@ -159,10 +159,10 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.user.feishu-claude.p
 
 验证:`afk status` 应显示 `daemon : running`。
 
-### 4.2 Linux (systemd user unit,tprod 待验证)
+### 4.2 Linux (systemd user unit,待实测)
 
 ```bash
-cd ~/aiDev/others/claude-feishu-remote
+git clone https://github.com/joblong/claude-feishu-remote.git && cd claude-feishu-remote
 bash install.sh
 # 脚本会提示:sudo loginctl enable-linger $(id -un)   ← 登出 ssh 后服务继续跑
 cp .env.template ~/.claude/feishu-daemon/.env
@@ -177,7 +177,7 @@ systemctl --user enable --now feishu-claude.service
 ### 4.3 卸载
 
 ```bash
-bash ~/aiDev/others/claude-feishu-remote/uninstall.sh
+bash uninstall.sh    # 在 clone 下来的目录里执行
 ```
 
 保留 `.env` 和 runtime 数据,其他清干净。
@@ -202,7 +202,7 @@ bash ~/aiDev/others/claude-feishu-remote/uninstall.sh
 
 ## 7. 验证记录
 
-### 2026-04-28 openClawMac
+### 2026-04-28 macOS(本地)
 
 三按钮端到端(daemon.log 摘要):
 ```
@@ -221,12 +221,12 @@ bash ~/aiDev/others/claude-feishu-remote/uninstall.sh
 - WS 长连稳定(`connected to wss://msg-frontier.feishu.cn/ws/v2`)
 - `afk status` 显示 `daemon : running`(修了老 `launchctl list` 探活 bug)
 
-### tprod
+### Linux 服务器
 
 **尚未部署**。要做:
-1. rsync 代码到 tprod
+1. 把代码拷到 Linux 服务器(`git clone` 或 rsync)
 2. `bash install.sh`(Linux 分支)
-3. `sudo loginctl enable-linger tal`
+3. `sudo loginctl enable-linger $(id -un)`
 4. 拷 .env、`systemctl --user enable --now feishu-claude.service`
 5. tmux 里跑 `claude -p 'run ls'`,三按钮各一次
 
@@ -242,6 +242,6 @@ bash ~/aiDev/others/claude-feishu-remote/uninstall.sh
 
 1. **hook 永不阻塞**。任何想加的新功能都不能让 hook 等网络。
 2. **daemon 必须和 Claude Code 同机**。`tmux send-keys` 的前提。
-3. **推 tprod 之前先在 openClawMac 验一次**,tprod 是线上。
+3. **推线上之前先在本地 Mac 验一次**。
 4. **launchd/systemd 的 Environment 里代理清空**,每改 unit 文件都要检查。
 5. **卡片不加超时**。真想加"提醒",做成单独通知而不是"xxx 后变 deny"。

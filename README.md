@@ -33,8 +33,8 @@ Claude Code ──PreToolUse(stdin JSON)──▶ ~/.claude/hooks/approve.sh
 ## 安装
 
 ```bash
-git clone <repo> ~/aiDev/others/claude-feishu-remote
-cd ~/aiDev/others/claude-feishu-remote
+git clone https://github.com/joblong/claude-feishu-remote.git
+cd claude-feishu-remote
 
 # 1) 把 .env.template 复制并填入飞书 App 凭证
 cp .env.template ~/.claude/feishu-daemon/.env   # install.sh 会自动建目录
@@ -80,7 +80,7 @@ tail -f ~/.claude/feishu-remote/hook.log      # 看 hook 被触发的记录
 ## 卸载
 
 ```bash
-bash ~/aiDev/others/claude-feishu-remote/uninstall.sh
+bash uninstall.sh    # 在 clone 下来的目录里执行
 ```
 
 ## 致谢
