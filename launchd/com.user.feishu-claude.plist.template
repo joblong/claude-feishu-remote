@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.feishu-claude</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON__</string>
+        <string>-m</string>
+        <string>daemon.feishu_daemon</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__DAEMON_DIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>__DAEMON_PARENT__</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <!-- 绕过继承的代理;飞书在国内直连更稳,且避免依赖 python-socks -->
+        <key>http_proxy</key>
+        <string></string>
+        <key>https_proxy</key>
+        <string></string>
+        <key>all_proxy</key>
+        <string></string>
+        <key>HTTP_PROXY</key>
+        <string></string>
+        <key>HTTPS_PROXY</key>
+        <string></string>
+        <key>ALL_PROXY</key>
+        <string></string>
+        <key>no_proxy</key>
+        <string>*</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/daemon.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/daemon.stderr.log</string>
+</dict>
+</plist>

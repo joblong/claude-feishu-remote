@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# afk — toggle Claude Code feishu-remote "away" mode.
+#   afk on      creates the sentinel (hooks will block on feishu approval)
+#   afk off     removes the sentinel (hooks return "ask" → native UI)
+#   afk status  shows sentinel + daemon state
+
+set -euo pipefail
+
+SENTINEL="${HOME}/.claude/feishu-remote/away-mode"
+LABEL="com.user.feishu-claude"
+SERVICE_NAME="feishu-claude.service"   # Linux systemd
+
+daemon_status() {
+    case "$(uname -s)" in
+        Darwin)
+            # 现代 launchd:user agent 登记在 gui/<uid> domain, `launchctl list` 看不见
+            if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
+                echo "running"
+            else
+                echo "not loaded"
+            fi
+            ;;
+        Linux)
+            if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+                echo "running"
+            else
+                echo "not loaded"
+            fi
+            ;;
+        *)
+            echo "unknown platform"
+            ;;
+    esac
+}
+
+usage() {
+    cat <<EOF
+Usage: afk <on|off|status|-h>
+
+  on      enable away mode (feishu-remote approval takes over)
+  off     disable away mode (Claude Code native permission UI)
+  status  show sentinel and daemon state
+EOF
+}
+
+case "${1:-}" in
+    on)
+        if [[ -z "${TMUX:-}" ]]; then
+            echo "afk: 拒绝开启 —— 当前不在 tmux 内。" >&2
+            echo "原因:手机按钮需要通过 tmux send-keys 把结果写回 Claude Code 所在 pane。" >&2
+            echo "请先 'tmux new' 或 'tmux attach' 再来。" >&2
+            exit 1
+        fi
+        mkdir -p "$(dirname "$SENTINEL")"
+        touch "$SENTINEL"
+        echo "afk: ON (sentinel $SENTINEL)"
+        ;;
+    off)
+        rm -f "$SENTINEL"
+        echo "afk: OFF"
+        ;;
+    status)
+        if [[ -e "$SENTINEL" ]]; then
+            echo "sentinel : ON  ($SENTINEL)"
+        else
+            echo "sentinel : OFF"
+        fi
+        printf 'daemon   : %s\n' "$(daemon_status)"
+        ;;
+    -h|--help|help|"")
+        usage
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac

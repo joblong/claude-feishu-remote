@@ -1,0 +1,28 @@
+[Unit]
+Description=Claude Code x Feishu remote approval daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__DAEMON_DIR__
+ExecStart=__PYTHON__ -m daemon.feishu_daemon
+Restart=always
+RestartSec=10
+
+# 同 launchd plist 的代理清除:飞书国内直连更稳,避免继承的 SOCKS/HTTP 代理把 WS 弄挂
+Environment=PYTHONPATH=__DAEMON_PARENT__
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=http_proxy=
+Environment=https_proxy=
+Environment=all_proxy=
+Environment=HTTP_PROXY=
+Environment=HTTPS_PROXY=
+Environment=ALL_PROXY=
+Environment=no_proxy=*
+
+StandardOutput=append:__LOG_DIR__/daemon.stdout.log
+StandardError=append:__LOG_DIR__/daemon.stderr.log
+
+[Install]
+WantedBy=default.target
