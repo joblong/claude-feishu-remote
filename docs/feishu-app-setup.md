@@ -44,15 +44,68 @@
 
 **方法 A**(推荐 — daemon 自动打印):
 
-1. 把 .env 里 APP_ID / APP_SECRET 填好,daemon 先跑起来(`launchctl bootstrap …` 或 `python3 -m daemon.feishu_daemon`)
-2. 在飞书里把机器人拉到 1:1 对话,@机器人 随便说一句
-3. `tail ~/.claude/feishu-remote/daemon.log` 会看到类似:
+daemon 订阅了 `im.message.receive_v1`,机器人收到任何消息时都会在日志里打印发送者的 open_id。思路是:先让 daemon 跑起来,然后给机器人发一句话,读日志拿值。
+
+1. **填占位凭证让 daemon 能启动**
+
+   编辑 `~/.claude/feishu-daemon/.env`,把 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 填成真实值。`FEISHU_TARGET_OPEN_ID` 这一行**必须非空**(代码里是 `required=True`),先随便填个占位值:
    ```
-   im.message.receive_v1 open_id=ou_xxxxxxxxxxxxxxxxxxxxx chat_id=oc_... content=...
+   FEISHU_APP_ID=cli_xxxxxxxxxxxx
+   FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   FEISHU_TARGET_OPEN_ID=ou_placeholder
    ```
-4. 把 `ou_...` 写入 `.env` 的 `FEISHU_TARGET_OPEN_ID`,重启 daemon
+
+2. **启动(或重启) daemon**
+
+   macOS:
+   ```bash
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.user.feishu-claude.plist
+   # 已加载过的话用 kickstart 重启:
+   launchctl kickstart -k gui/$(id -u)/com.user.feishu-claude
+   ```
+
+   Linux:
+   ```bash
+   systemctl --user restart feishu-claude.service
+   ```
+
+   确认启动成功:
+   ```bash
+   afk status       # 应显示 daemon : running
+   tail ~/.claude/feishu-remote/daemon.log    # 应看到 "daemon starting" 和 WebSocket 连接日志
+   ```
+
+3. **给机器人发消息**
+
+   在飞书里搜你创建的机器人名字 → 加为好友 → 1:1 对话里发任意一句(比如 `hello`)。
+
+4. **读日志拿 open_id**
+
+   ```bash
+   tail -f ~/.claude/feishu-remote/daemon.log
+   ```
+
+   你会看到类似这样一行(来自 daemon 的 `on_message` handler):
+   ```
+   2026-04-29 ... INFO feishu-daemon: im.message.receive_v1 open_id=ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx chat_id=oc_xxx content=...
+   ```
+
+   复制 `ou_` 开头那一串(32 位 hex)。
+
+5. **回填真实 open_id 并重启**
+
+   把 `.env` 里 `FEISHU_TARGET_OPEN_ID=ou_placeholder` 改成刚拿到的真实 `ou_...`,重启 daemon(同步骤 2)。
 
 **方法 B**:开放平台后台「通讯录 → 成员 → 你自己」也能看到 open_id(有的租户隐藏)。
+
+## 7. 端到端自测
+
+```bash
+afk on                      # 必须在 tmux 里(bin/afk 会检查 $TMUX)
+claude -p 'run ls'          # 在同一 tmux pane 里
+```
+
+触发 Bash 工具调用时,手机飞书应该收到审批卡片。点「允许」/「拒绝」,Claude Code 继续或中止。
 
 ## 常见坑
 
