@@ -66,6 +66,8 @@ tail -f ~/.claude/feishu-remote/daemon.log    # 看 daemon 日志
 tail -f ~/.claude/feishu-remote/hook.log      # 看 hook 被触发的记录
 ```
 
+可选:tmux 状态栏显示当前模式 + 一键切换,见 [docs/tmux-integration.md](docs/tmux-integration.md)。
+
 ## 当前状态
 
 **脚手架阶段** — 目录结构、install/uninstall、daemon 空壳、hook 返回 `ask`。功能未完全就绪:
