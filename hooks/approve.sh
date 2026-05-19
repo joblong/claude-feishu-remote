@@ -6,10 +6,14 @@
 #   2. permission_mode=acceptEdits & tool ∈ {Write,Edit,MultiEdit} → allow
 #   3. session allow-list 命中(* 或 tool_name)→ allow
 #   4. sentinel 不存在 (afk off) → ask(交给 Claude Code 原生 UI)
-#   5. sentinel 存在 (afk on) → 非阻塞写 pending 通知 daemon 推飞书卡片 → ask
+#   5. sentinel 存在 (afk on) → 风险分级:
+#        5a. Edit/Write/MultiEdit/NotebookEdit 落在 cwd 子树 → allow
+#        5b. Bash 命中黑名单 → fall through 推卡;首词在白名单 → allow
+#        5c. 其他 → 非阻塞写 pending 通知 daemon 推飞书卡片 → ask
 #
 # 关键:hook 永不阻塞。终端原生 UI 和飞书卡片并行存在;先响应的一边生效。
 # daemon 从 pending 记录的 TMUX_PANE 用 tmux send-keys 把手机按键写回终端。
+# 分级规则硬编码在本文件,改动走 git review(见 docs/DESIGN.md §10)。
 
 set -u
 
@@ -78,6 +82,83 @@ fi
 if [[ ! -e "$SENTINEL" ]]; then
     log_line "session=$session_id tool=$tool_name mode=$permission_mode → ask (afk off)"
     emit_decision "ask"
+fi
+
+# --- 4.5. 风险分级(只在 afk on 时生效) ---
+# 把 ~/x、相对路径转成绝对路径。不依赖 realpath(macOS 默认无)。
+normalize_path() {
+    local p="$1"
+    [[ -z "$p" ]] && { printf ''; return; }
+    # ~ 展开
+    if [[ "$p" == "~" ]]; then p="$HOME"
+    elif [[ "$p" == "~/"* ]]; then p="$HOME/${p#~/}"
+    fi
+    # 已是绝对路径则原样返回
+    if [[ "$p" == /* ]]; then printf '%s' "$p"; return; fi
+    # 相对路径:基于 $cwd 拼接(不解析 ../,够用)
+    if [[ -n "${cwd:-}" ]]; then
+        printf '%s/%s' "$cwd" "$p"
+    else
+        printf '%s' "$p"
+    fi
+}
+
+# 4.5.1 Edit/Write/MultiEdit/NotebookEdit:工作区内自动放行
+case "$tool_name" in
+    Edit|Write|MultiEdit)
+        target_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""')
+        ;;
+    NotebookEdit)
+        target_path=$(printf '%s' "$input" | jq -r '.tool_input.notebook_path // ""')
+        ;;
+    *)
+        target_path=""
+        ;;
+esac
+if [[ -n "$target_path" ]] && [[ -n "$cwd" ]]; then
+    abs_target=$(normalize_path "$target_path")
+    abs_cwd=$(normalize_path "$cwd")
+    # cwd 末尾去掉 / 再比较,避免 //
+    abs_cwd="${abs_cwd%/}"
+    if [[ "$abs_target" == "$abs_cwd" ]] || [[ "$abs_target" == "$abs_cwd"/* ]]; then
+        log_line "session=$session_id tool=$tool_name path=$abs_target → allow (workspace edit)"
+        emit_decision "allow"
+    fi
+fi
+
+# 4.5.2 Bash:黑名单优先,白名单首词放行
+if [[ "$tool_name" == "Bash" ]]; then
+    cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""')
+    # 黑名单:任意 token 命中即推卡(优先级最高,先于白名单)
+    # 顺序无关,只要命中其一就 fall through 到第 5 步
+    blacklist_pat='(\b(rm|sudo|chmod|chown|dd|mkfs|fdisk|shutdown|reboot|halt|kill|killall|pkill)\b)'
+    blacklist_pat+='|(\b(curl|wget)\b.*\|.*\b(sh|bash|zsh)\b)'
+    blacklist_pat+='|(\bgit[[:space:]]+push\b.*--force)'
+    blacklist_pat+='|(\bgit[[:space:]]+push\b.*-f\b)'
+    blacklist_pat+='|(\bgit[[:space:]]+reset\b.*--hard)'
+    blacklist_pat+='|(\bgit[[:space:]]+clean\b.*-[a-zA-Z]*f)'
+    blacklist_pat+='|(>[[:space:]]*(/etc/|/usr/|~/\.ssh|~/\.aws|~/\.config|/var/))'
+    blacklist_pat+='|((/etc/|~/\.ssh|/\.ssh|~/\.aws|/\.aws|/var/log/|/usr/local/etc))'
+    blacklist_pat+='|(\bdocker[[:space:]]+(rm|system[[:space:]]+prune|volume[[:space:]]+rm))'
+    blacklist_pat+='|(\bnpm[[:space:]]+publish\b)'
+    blacklist_pat+='|(\bpip[[:space:]]+uninstall\b)'
+
+    if printf '%s' "$cmd" | grep -qE "$blacklist_pat"; then
+        log_line "session=$session_id tool=Bash → ask (blacklist hit) cmd=$(printf '%s' "$cmd" | head -c 120)"
+        # fall through 到第 5 步推卡
+    else
+        first_word=$(printf '%s' "$cmd" | awk '{print $1}' | sed 's|.*/||')
+        whitelist=" ls cat head tail wc grep find file stat du df ps top htop free \
+echo printf which whereis whoami pwd id uname date uptime \
+git diff cmp shasum sha256sum md5 md5sum jq yq tree \
+node npm yarn pnpm python python3 pip pip3 make tmux \
+mkdir touch test [ "
+        if [[ "$whitelist" == *" $first_word "* ]]; then
+            log_line "session=$session_id tool=Bash → allow (whitelist: $first_word)"
+            emit_decision "allow"
+        fi
+        # 不在白名单也不在黑名单 → 默认推卡
+    fi
 fi
 
 # --- 5. sentinel 存在:离开模式,非阻塞写 pending ---

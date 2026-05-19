@@ -68,6 +68,8 @@ tail -f ~/.claude/feishu-remote/hook.log      # 看 hook 被触发的记录
 
 可选:tmux 状态栏显示当前模式 + 一键切换,见 [docs/tmux-integration.md](docs/tmux-integration.md)。
 
+afk on 时低风险操作(`ls`/`cat`/`git status`/工作区内 `Edit`/`Write` 等)会自动放行,只有真正危险的动作(`rm`/`sudo`/`curl|sh`/写 `~/.ssh` 等)才推飞书审批,避免手机被刷屏。完整规则见 [docs/DESIGN.md §10 风险分级规则](docs/DESIGN.md#10-风险分级规则approvesh-45)。
+
 ## 当前状态
 
 **脚手架阶段** — 目录结构、install/uninstall、daemon 空壳、hook 返回 `ask`。功能未完全就绪:

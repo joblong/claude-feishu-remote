@@ -106,6 +106,7 @@ elif permission_mode == "acceptEdits" and tool in {Write,Edit,MultiEdit,Notebook
                                                   → allow
 elif tool_name ∈ session_allow_list[session_id]:  → allow
 elif not sentinel_exists():                       → ask            (afk off)
+elif risk_classify() == green:                    → allow          (afk on,低风险自动放行,见 §10)
 else:                                             写 pending,→ ask (afk on,双端并行)
 ```
 
@@ -245,3 +246,57 @@ bash uninstall.sh    # 在 clone 下来的目录里执行
 3. **推线上之前先在本地 Mac 验一次**。
 4. **launchd/systemd 的 Environment 里代理清空**,每改 unit 文件都要检查。
 5. **卡片不加超时**。真想加"提醒",做成单独通知而不是"xxx 后变 deny"。
+6. **风险分级规则放在 hook 里,不引入外部配置文件**。黑/白名单错改可能放过 `rm -rf`,变更必须走 git review,不该手抖改 yaml 就生效。
+
+## 10. 风险分级规则(approve.sh §4.5)
+
+afk on 时,99% 的工具调用是 `ls`/`cat`/`git status`/项目内 `Edit` 这类安全操作 —— 全推飞书会刷屏,且把真正危险的操作埋掉。所以在第 4 步(sentinel 检查)和第 5 步(写 pending 推卡)之间加一层风险分级:**绿 → 直接 allow,不推卡;红 → fall through 推卡走人工审批**。
+
+**作用域只在 `afk on` 时生效**;`afk off` 行为完全不变(§1 硬约束)。
+
+### 10.1 决策顺序(对每次 PreToolUse)
+
+1. 若 `tool_name ∈ {Edit, Write, MultiEdit, NotebookEdit}` 且目标路径在 `cwd` 子树 → **绿 (allow)**
+2. 若 `tool_name == Bash`:
+   - **黑名单优先**:整条命令任意 token 命中黑名单正则 → **红 (推卡)**
+   - 首词在白名单 → **绿 (allow)**
+3. 其余 → **红 (推卡)**(默认红 = fail-safe,未知命令第一次出现时让用户决定)
+
+### 10.2 Bash 黑名单(任意 token 命中 = 红)
+
+- 删除/系统管理:`rm`、`sudo`、`chmod`、`chown`、`dd`、`mkfs`、`fdisk`、`shutdown`、`reboot`、`halt`、`kill`、`killall`、`pkill`
+- 远程下载执行:`curl|sh`、`wget|sh`、`curl|bash` 等
+- 危险 git 子命令:`git push --force` / `git push -f`、`git reset --hard`、`git clean -*f*`
+- 重定向到敏感路径:`> /etc/...` / `> /usr/...` / `> ~/.ssh` / `> ~/.aws` / `> ~/.config` / `> /var/...`
+- 直接出现敏感路径:`/etc/`、`~/.ssh`、`~/.aws`、`/var/log/`、`/usr/local/etc`
+- 容器/包管理高风险:`docker rm`、`docker system prune`、`docker volume rm`、`npm publish`、`pip uninstall`
+
+**黑名单先于白名单** —— `ls; rm -rf ~` 首词是白名单的 `ls`,但因含 `rm` 仍判红;同理 `git` 在白名单,但 `git push --force` 命中黑名单仍判红。
+
+### 10.3 Bash 白名单首词(命中 = 绿)
+
+只看命令首词(去掉路径前缀),覆盖日常只读/无副作用操作:
+
+```
+ls cat head tail wc grep find file stat du df ps top htop free
+echo printf which whereis whoami pwd id uname date uptime
+git diff cmp shasum sha256sum md5 md5sum jq yq tree
+node npm yarn pnpm python python3 pip pip3 make tmux
+mkdir touch test [
+```
+
+注意 `git`/`npm`/`pip` 这些首词被放行,是因为危险子命令(`git push --force`、`npm publish`、`pip uninstall`)已在黑名单先拦。
+
+### 10.4 不在范围内的工具
+
+`Read`/`Glob`/`Grep`/`Task`/`WebFetch` 等本来就不在 hook matcher 列表(`install.sh:181` `matcher: "Bash|Write|Edit|MultiEdit"`),不会触发 `approve.sh`,也就不需要分级。
+
+### 10.5 升级规则的方法
+
+直接改 `hooks/approve.sh` §4.5 的 `blacklist_pat` 和 `whitelist`,git commit + 重装(install.sh 是软链,改完即生效)。**不要**把规则挪到外部配置文件 —— 见铁律 6。
+
+### 10.6 已知局限
+
+- 不解析 `mv` / `cp` 是否覆盖,只看是否含敏感路径。可能漏拦 `cp foo /tmp/bar`(无害)和拦下 `cp /etc/hosts /tmp/`(意图通常无害但保守)
+- 黑名单是文本匹配,不感知 shell 函数/alias。Claude Code 的 Bash tool 是非交互 bash,几乎不会用 alias,够用
+- `find ... -delete` / `find ... -exec rm` 没专门拦,但前者含 `find`(白名单)且后者含 `rm`(黑名单优先) → 命中红
