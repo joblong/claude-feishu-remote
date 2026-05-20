@@ -281,7 +281,7 @@ afk on 时,99% 的工具调用是 `ls`/`cat`/`git status`/项目内 `Edit` 这�
 只看命令首词(去掉路径前缀),覆盖日常只读/无副作用操作:
 
 ```
-ls cat head tail wc grep find file stat du df ps top htop free
+ls cat head tail wc grep awk find file stat du df ps top htop free
 echo printf which whereis whoami pwd id uname date uptime
 cd pushd popd export env true false :
 git diff cmp shasum sha256sum md5 md5sum jq yq tree
