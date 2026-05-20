@@ -153,7 +153,7 @@ if [[ "$tool_name" == "Bash" ]]; then
         log_line "session=$session_id tool=Bash → ask (blacklist hit) cmd=$(printf '%s' "$cmd" | head -c 120)"
         # fall through 到第 5 步推卡
     else
-        first_word=$(printf '%s' "$cmd" | awk '{print $1}' | sed 's|.*/||')
+        first_word=$(printf '%s' "$cmd" | head -n1 | awk '{print $1}' | sed 's|.*/||')
         whitelist=" ls cat head tail wc grep find file stat du df ps top htop free \
 echo printf which whereis whoami pwd id uname date uptime \
 cd pushd popd export env true false : \
