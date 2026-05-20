@@ -280,12 +280,15 @@ afk on 时,99% 的工具调用是 `ls`/`cat`/`git status`/项目内 `Edit` 这�
 ```
 ls cat head tail wc grep find file stat du df ps top htop free
 echo printf which whereis whoami pwd id uname date uptime
+cd pushd popd export env true false :
 git diff cmp shasum sha256sum md5 md5sum jq yq tree
 node npm yarn pnpm python python3 pip pip3 make tmux
 mkdir touch test [
 ```
 
 注意 `git`/`npm`/`pip` 这些首词被放行,是因为危险子命令(`git push --force`、`npm publish`、`pip uninstall`)已在黑名单先拦。
+
+`cd` 首词放行很关键 —— Claude Code 经常跑 `cd /some/dir && git status && ...` 这种复合命令,首词是 `cd`。即便后续接危险动作(如 `cd /tmp && rm -rf /`),黑名单会优先命中 `rm` 把整条判红,所以放行 `cd` 是安全的。
 
 ### 10.4 不在范围内的工具
 

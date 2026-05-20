@@ -150,6 +150,7 @@ if [[ "$tool_name" == "Bash" ]]; then
         first_word=$(printf '%s' "$cmd" | awk '{print $1}' | sed 's|.*/||')
         whitelist=" ls cat head tail wc grep find file stat du df ps top htop free \
 echo printf which whereis whoami pwd id uname date uptime \
+cd pushd popd export env true false : \
 git diff cmp shasum sha256sum md5 md5sum jq yq tree \
 node npm yarn pnpm python python3 pip pip3 make tmux \
 mkdir touch test [ "
