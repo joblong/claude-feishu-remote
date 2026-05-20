@@ -256,7 +256,9 @@ afk on 时,99% 的工具调用是 `ls`/`cat`/`git status`/项目内 `Edit` 这�
 
 ### 10.1 决策顺序(对每次 PreToolUse)
 
-1. 若 `tool_name ∈ {Edit, Write, MultiEdit, NotebookEdit}` 且目标路径在 `cwd` 子树 → **绿 (allow)**
+1. 若 `tool_name ∈ {Edit, Write, MultiEdit, NotebookEdit}`:
+   - 目标路径在 `cwd` 子树 → **绿 (allow)**
+   - 目标路径在 `$HOME/.claude/projects/*/memory/` 下(Claude auto memory) → **绿 (allow)**
 2. 若 `tool_name == Bash`:
    - **黑名单优先**:整条命令任意 token 命中黑名单正则 → **红 (推卡)**
    - 首词在白名单 → **绿 (allow)**

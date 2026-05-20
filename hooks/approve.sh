@@ -124,6 +124,12 @@ if [[ -n "$target_path" ]] && [[ -n "$cwd" ]]; then
         log_line "session=$session_id tool=$tool_name path=$abs_target → allow (workspace edit)"
         emit_decision "allow"
     fi
+    # Claude 的 auto memory 写入 ~/.claude/projects/<repo>/memory/*.md,属于 AI 工作区
+    # 不放行整个 ~/.claude(避免误改 settings.json),只放 memory 子目录
+    if [[ "$abs_target" == "$HOME/.claude/projects/"*"/memory/"* ]]; then
+        log_line "session=$session_id tool=$tool_name path=$abs_target → allow (claude memory)"
+        emit_decision "allow"
+    fi
 fi
 
 # 4.5.2 Bash:黑名单优先,白名单首词放行
