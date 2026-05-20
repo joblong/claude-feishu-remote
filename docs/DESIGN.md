@@ -258,6 +258,7 @@ afk on 时,99% 的工具调用是 `ls`/`cat`/`git status`/项目内 `Edit` 这�
 
 1. 若 `tool_name ∈ {Edit, Write, MultiEdit, NotebookEdit}`:
    - 目标路径在 `cwd` 子树 → **绿 (allow)**
+   - 目标路径在 `cwd` 所属 git 仓库根目录子树 → **绿 (allow)**(解决 cwd=foo/frontend 但 target=foo/docs/x.md 这种"同项目兄弟目录"误拦)
    - 目标路径在 `$HOME/.claude/projects/*/memory/` 下(Claude auto memory) → **绿 (allow)**
 2. 若 `tool_name == Bash`:
    - **黑名单优先**:整条命令任意 token 命中黑名单正则 → **红 (推卡)**

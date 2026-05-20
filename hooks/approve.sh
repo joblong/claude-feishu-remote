@@ -124,6 +124,18 @@ if [[ -n "$target_path" ]] && [[ -n "$cwd" ]]; then
         log_line "session=$session_id tool=$tool_name path=$abs_target → allow (workspace edit)"
         emit_decision "allow"
     fi
+    # cwd 在某个 git 项目下,target 也在同一 git repo root 子树 → 视为项目内编辑
+    # 解决 cwd=foo/frontend 但 target=foo/docs/x.md 的常见误拦
+    if command -v git >/dev/null 2>&1; then
+        repo_root=$(git -C "$abs_cwd" rev-parse --show-toplevel 2>/dev/null || true)
+        if [[ -n "$repo_root" ]]; then
+            repo_root="${repo_root%/}"
+            if [[ "$abs_target" == "$repo_root" ]] || [[ "$abs_target" == "$repo_root"/* ]]; then
+                log_line "session=$session_id tool=$tool_name path=$abs_target → allow (git repo: $repo_root)"
+                emit_decision "allow"
+            fi
+        fi
+    fi
     # Claude 的 auto memory 写入 ~/.claude/projects/<repo>/memory/*.md,属于 AI 工作区
     # 不放行整个 ~/.claude(避免误改 settings.json),只放 memory 子目录
     if [[ "$abs_target" == "$HOME/.claude/projects/"*"/memory/"* ]]; then
